@@ -795,10 +795,32 @@ class Wave(TinyTag):
                 id3 = ID3(fh, 0)
                 id3._parse_id3v2(fh)
                 self.update(id3)
+            elif subchunkid == b'LIST':
+                self._parse_list(fh, subchunksize)
             else:  # some other chunk, just skip the data
                 fh.seek(subchunksize, 1)
             chunk_header = fh.read(8)
         self._duration_parsed = True
+
+    def _parse_list(self, fh, listsize):
+        chunk_header = fh.read(4) # grab list subchunk label
+        while len(chunk_header) == 4:
+            subchunkid = struct.unpack('4s', chunk_header)
+            if subchunkid[0] == b'INFO':
+                chunk_header = fh.read(8)
+                while len(chunk_header) == 8:
+                    infoid, infosize = struct.unpack('4sI', chunk_header)
+                    if infoid == b'IART':
+                        artist = fh.read(infosize)            
+                        def utfdecode(x):
+                            return x.decode()
+                        self._set_field('artist', artist, transfunc=utfdecode)
+                    else:
+                        fh.seek(infosize, 1)
+                    chunk_header = fh.read(8)
+            else: # only supporting INFO subchunks, skip others
+                fh.seek(listsize-4, 1) #backup since we already grabbed the label of this chunk
+                return
 
     def _parse_tag(self, fh):
         if not self._duration_parsed:
